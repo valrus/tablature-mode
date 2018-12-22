@@ -1,7 +1,5 @@
 ;;; tablature-mode.el -- modes for editing guitar tablature in GNU emacs
 
-; Contains chord-mode and lead-mode, both minor modes of tab-mode.
-
 ;; Author:  Mark R. Rubin <mark@phineas.jpl.nasa.gov>
 ;; Maintainer: Ian McCowan <imccowan@fastmail.fm>
 ;; Created: July 28, 1993
@@ -14,6 +12,9 @@
 ;; This file is not part of GNU Emacs.
 
 ;;; Commentary:
+;;
+;; Contains chord-mode and lead-mode, both minor modes of tab-mode.
+
 ;; This code is released into the public domain without any express or implied
 ;; warranty.  The author accepts no responsibility for any consequences
 ;; arising from its use.

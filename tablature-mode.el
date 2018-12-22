@@ -7,7 +7,7 @@
 ;; Created: July 28, 1993
 ;; Modified: December 22, 2018
 ;; Version: 2.0
-;; Keywords: tablature
+;; Keywords: tools, tablature
 ;; Homepage: https://github.com/valrus/tablature-mode
 ;; Package-Requires: ((cl-lib "0.5"))
 ;;

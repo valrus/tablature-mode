@@ -1,4 +1,6 @@
-;;; tablature-mode.el -- modes for editing guitar tablature in GNU emacs
+;;; tablature-mode.el --- Tablature modes for Emacs, 25th anniversary edition  -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2018 Ian McCowan
 
 ;; Author:  Mark R. Rubin <mark@phineas.jpl.nasa.gov>
 ;; Maintainer: Ian McCowan <imccowan@fastmail.fm>

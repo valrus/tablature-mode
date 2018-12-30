@@ -15,7 +15,101 @@
 
 ;;; Commentary:
 ;;
-;; Contains chord-mode and lead-mode, both minor modes of tab-mode.
+;;
+;; Major mode for entering tablature.  Always use minor modes lead-mode
+;; or chord-mode instead.
+
+;; In tab-mode, single keys represent notes on the guitar fretboard, and
+;; pressing them creates tablature.  This only happens if the cursor is
+;; in a tablature staff; otherwise the keys have their normal, text, meaning.
+;; The keys are:
+
+;;                    strings
+
+;;              E   A    D   G   B   e
+
+;;                 1   2   3   4   5   6         N
+;;                  q   w   e   r   t   y        N+1    frets
+;;                   a   s   d   f   g   h       N+2
+;;                    z   x   c   v   b   n      N+3
+
+;; In chord-mode, the cursor remains in place (for entry of multiple-note
+;; chords) until manually moved forward with SPACE or `\\[forward-char]'.  In
+;; lead-mode, the cursor automatically advances after each note.
+
+;; For more information on a key or action, do:
+;;   `\\[describe-key]' and then enter the key(s) for the action
+;; or
+;;   `\\[describe-function]' and then enter the name of the action
+
+
+;;   KEY	ACTION
+
+;;   {	enter chord mode
+;;   }	enter lead mode
+
+;;   =	make a new tablature staff
+
+;;   <	decrement base fret position by one (is printed on mode line)
+;;   >	increment base fret position by one (is printed on mode line)
+;;   ?	prompt for numeric entry of base fret position
+
+;;   SPACE 	move one tab position forward
+;;   \\[tab-forward-char]	move one tab position forward
+;;   \\[tab-backward-char]	move one tab position backward
+;;   \\[tab-forward-barline]	move forward one bar line
+;;   \\[tab-backward-barline]	move back one bar line
+;;   \\[tab-up-staff]	move up one staff
+;;   \\[tab-down-staff]	move down one staff
+
+
+;;   C-h	delete previous (lead-mode) or current (chord-mode) note
+;;   C-?	delete previous note/chord
+;;   \\[tab-delete-chord-forward]	delete current note/chord
+
+;;   C-i	insert blank space
+
+;;   |	toggle bar line
+
+;;   [	mark current note as hammer-on
+;;   ]	mark current note as pull-off
+;;   ;	mark current note as bend
+;;   '	mark current note as release
+;;   /	mark current note as slide-up
+;;   \	mark current note as slide-down
+;;   ~	mark current note as vibrato
+;;   (	mark current note as ghost note
+;;   -	mark current note as normal note
+
+;;   +	transpose notes in region by N frets (tab-transpose)
+
+;;   \\[tab-copy-region-as-kill]	memorize tab between dot and mark (incl).
+;;   \\[tab-kill-region]	as above, but also delete
+;;   \\[tab-yank]	insert previously killed tablature
+
+;;   \\[tab-copy-retune]	copy tab staff, transposing to current tuning
+;;   \\[tab-learn-tuning] memorize new tuning (cursor first string)
+;;   \\[tab-retune-string] return current string and learn new tuning
+
+;;   \\[tab-analyze-chord]	analyze chord (cursor on root note)
+;;   \\[tab-label-chord]	insert previously analyzed chord name
+;;   \\[tab-note-name]	change whether chords are A# vs. Bb, etc.
+
+;;   \\[tab-higher-string]	move note to next higher string
+;;   \\[tab-lower-string] move note to next higher string
+
+;;   \\[tab-up-12]	move note up 12 frets
+;;   \\[tab-down-12]	move note down 12 frets
+
+;; Tablature mode recognizes when the cursor is on a tab staff (and draws
+;; new tab staffs) with six, three-character long, strings.  Each of the six
+;; must be unique.  To change these strings (e.g. for alternate tunings),
+;; enter them (while *not* in tab-mode) at the beginnings of six consecutive
+;; lines, and use `\\[execute-extended-command] tab-learn-tuning'.
+
+
+;; Full list of commands:
+;; \\{tab-mode-map}"
 
 ;; This code is released into the public domain without any express or implied
 ;; warranty.  The author accepts no responsibility for any consequences
@@ -102,9 +196,7 @@
 
 (defcustom tab-12-tone-chords
   t
-  "Spell chords in understandable, rational, 12-tone system in addition
-to normal 1st, 3rd, 5th, b7th, etc.  Can take value `t' for true, or
-`nil' for false."
+  "Spell chords in 12-tone system in addition to normal 1st, 3rd, 5th, b7th, etc."
   :type 'boolean)
 
 (defcustom default-tablature-width
@@ -136,20 +228,20 @@ Commands:
 
 (defvar tab-position-as-string
 	"0"
-"String variant of tab-position, for mode line")
+"String variant of tab-position for mode line.")
 
 (defvar tab-pending-embellishment
 	nil
-"Embellishment to be added to next entered note, or blank if none")
+"Embellishment to be added to next entered note, or nil if none.")
 
 (defvar tab-killed-width
 	""
-"Width of last killed region")
+"Width of last killed region.")
 
 (defvar tab-last-chord
 	""
-"Chord analyzed by `\\[tab-analyze-chord]' (tab-analyze-chord), available
-for automatic insertion into tab by `\\[tab-label-chord]' (tab-label-chord)")
+"Chord analyzed by `\\[tab-analyze-chord]' (tab-analyze-chord).
+Available for automatic insertion into tab by `\\[tab-label-chord]' (tab-label-chord).")
 
 (defvar tab-string-regexp
   "^[a-gA-G][-b#]\|")
@@ -159,106 +251,12 @@ for automatic insertion into tab by `\\[tab-label-chord]' (tab-label-chord)")
      ("\|" . font-lock-constant-face)
      ("\\([0-9]+\\)-" . (1 font-lock-variable-name-face))
      ("\n\t\\(.*\\)" . (1 font-lock-comment-face))))
-  "Highlighting for tab mode")
+  "Highlighting for tab mode.")
 
 (defvar tab-syntax-highlights tab-font-lock-keywords-1)
 
 (define-derived-mode tab-mode fundamental-mode "Tablature"
-  "Major mode for entering tablature.  Always use minor modes lead-mode
-or chord-mode instead.
-
-In tab-mode, single keys represent notes on the guitar fretboard, and
-pressing them creates tablature.  This only happens if the cursor is
-in a tablature staff; otherwise the keys have their normal, text, meaning.
-The keys are:
-
-                   strings
-
-             E   A    D   G   B   e
-
-                1   2   3   4   5   6         N
-                 q   w   e   r   t   y        N+1    frets
-                  a   s   d   f   g   h       N+2
-                   z   x   c   v   b   n      N+3
-
-In chord-mode, the cursor remains in place (for entry of multiple-note
-chords) until manually moved forward with SPACE or `\\[forward-char]'.  In
-lead-mode, the cursor automatically advances after each note.
-
-For more information on a key or action, do:
-  `\\[describe-key]' and then enter the key(s) for the action
-or
-  `\\[describe-function]' and then enter the name of the action
-
-
-  KEY	ACTION
-
-  {	enter chord mode
-  }	enter lead mode
-
-  =	make a new tablature staff
-
-  <	decrement base fret position by one (is printed on mode line)
-  >	increment base fret position by one (is printed on mode line)
-  ?	prompt for numeric entry of base fret position
-
-  SPACE 	move one tab position forward
-  \\[tab-forward-char]	move one tab position forward
-  \\[tab-backward-char]	move one tab position backward
-  \\[tab-forward-barline]	move forward one bar line
-  \\[tab-backward-barline]	move back one bar line
-  \\[tab-up-staff]	move up one staff
-  \\[tab-down-staff]	move down one staff
-
-
-  C-h	delete previous (lead-mode) or current (chord-mode) note
-  C-?	delete previous note/chord
-  \\[tab-delete-chord-forward]	delete current note/chord
-
-  C-i	insert blank space
-
-  |	toggle bar line
-
-  [	mark current note as hammer-on
-  ]	mark current note as pull-off
-  ;	mark current note as bend
-  '	mark current note as release
-  /	mark current note as slide-up
-  \	mark current note as slide-down
-  ~	mark current note as vibrato
-  (	mark current note as ghost note
-  -	mark current note as normal note
-
-  +	transpose notes in region by N frets (tab-transpose)
-
-  \\[tab-copy-region-as-kill]	memorize tab between dot and mark (incl).
-  \\[tab-kill-region]	as above, but also delete
-  \\[tab-yank]	insert previously killed tablature
-
-  \\[tab-copy-retune]	copy tab staff, transposing to current tuning
-  \\[tab-learn-tuning] memorize new tuning (cursor first string)
-  \\[tab-retune-string] return current string and learn new tuning
-
-  \\[tab-analyze-chord]	analyze chord (cursor on root note)
-  \\[tab-label-chord]	insert previously analyzed chord name
-  \\[tab-note-name]	change whether chords are A# vs. Bb, etc.
-
-  \\[tab-higher-string]	move note to next higher string
-  \\[tab-lower-string] move note to next higher string
-
-  \\[tab-up-12]	move note up 12 frets
-  \\[tab-down-12]	move note down 12 frets
-
-Tablature mode recognizes when the cursor is on a tab staff (and draws
-new tab staffs) with six, three-character long, strings.  Each of the six
-must be unique.  To change these strings (e.g. for alternate tunings),
-enter them (while *not* in tab-mode) at the beginnings of six consecutive
-lines, and use `\\[execute-extended-command] tab-learn-tuning'.
-
-
-Full list of commands:
-\\{tab-mode-map}"
-
+  "Basic tab mode. Use chord-mode or lead-mode instead."
   (if (not tab-mode-map) (tab-make-mode-map))
   (use-local-map tab-mode-map)
 
@@ -308,6 +306,8 @@ Use `\\[describe-function] tab-mode' to see documentation for tab-mode."
 
 
 (defun tab-toggle-minor-mode ()
+  "Toggle between chord-mode and lead mode.
+If not already in tab-mode, activate that too."
   (interactive)
 
   (if (not (equal major-mode 'tab-mode))
@@ -317,7 +317,7 @@ Use `\\[describe-function] tab-mode' to see documentation for tab-mode."
 
 
 (defun tab-12-tone-chords (arg)
-  "Toggle 'tab-12-tone-chords flag, or set/clear according to optional argument.
+  "Toggle 'tab-12-tone-chords flag, or set/clear according to ARG.
 Flag controls whether chord spelling also includes rational 12-tone version."
   (interactive "P")
   (setq tab-12-tone-chords (if (null arg) (not tab-12-tone-chords)
@@ -325,7 +325,7 @@ Flag controls whether chord spelling also includes rational 12-tone version."
 
 
 (defun rebind-keys (stock custom)
-  "Rebind to second arg all keys currently bound to first arg."
+  "Rebind all keys currently bound to STOCK to CUSTOM."
   (let ((binding-list (where-is-internal stock)))
     (while binding-list
       (define-key tab-mode-map (car binding-list) custom)
@@ -372,7 +372,7 @@ Flag controls whether chord spelling also includes rational 12-tone version."
 
 
 (defun tab-make-mode-map ()
-  "Create tab mode map"
+  "Create tab mode map."
 
   ;; DEBUG ... hard-coded arrow-key bindings
   (global-unset-key	 "\M-[")
@@ -462,8 +462,9 @@ Flag controls whether chord spelling also includes rational 12-tone version."
 
 
 (defun tab-check-in-tab ()
-  "Return t/nil whether cursor is in a tab staff line.  Also, force cursor
-to nearest modulo 3 note position. Set global variable tab-current-string."
+  "Return whether cursor is in a tab staff line.
+Also, force cursor to nearest modulo 3 note position.
+Set global variable tab-current-string."
   (let ((in-tab t)
         (strings-above 0)
         (real-case-fold-search case-fold-search))
@@ -496,6 +497,7 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-decrement-position ()
+  "Decrement the base fret position."
   (interactive)
   (if (tab-check-in-tab)
       (if (> tab-position 0) (setq tab-position (1- tab-position)))
@@ -506,6 +508,7 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-increment-position ()
+  "Increment the base fret position."
   (interactive)
   (if (tab-check-in-tab)
       (setq tab-position (1+ tab-position))
@@ -516,7 +519,7 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-set-position (fret)
-  "Prompt for numeric entry of current fret position"
+  "Set current fret position to FRET or prompt for it."
   (interactive "P")
   (if (tab-check-in-tab)
       (progn
@@ -534,6 +537,7 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-forward-char (count)
+  "Move cursor forward COUNT spaces in the tab."
   (interactive "p")
   (let ((original-column (current-column)))
 
@@ -546,31 +550,36 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-backward-char (count)
+  "Move cursor backward COUNT spaces in the tab."
   (interactive "p")
   (if (tab-check-in-tab) (setq count (* count 3)))
   (backward-char count))
 
 
 (defun tab-forward-barline ()
-(interactive)
-	(if (tab-check-in-tab) (progn
-		(if (looking-at "|") (forward-char 1))
-	(re-search-forward "|\\|$")
-	(tab-check-in-tab))))
+  "Move cursor forward to the next barline."
+  (interactive)
+  (if (tab-check-in-tab) (progn
+                           (if (looking-at "|") (forward-char 1))
+                           (re-search-forward "|\\|$")
+                           (tab-check-in-tab))))
 
 
 (defun tab-backward-barline ()
-(interactive)
-	(if (tab-check-in-tab) (progn
-	(re-search-backward "|\\|^")
-	(tab-check-in-tab))))
+  "Move cursor backwards to the previous barline."
+  (interactive)
+  (if (tab-check-in-tab) (progn
+                           (re-search-backward "|\\|^")
+                           (tab-check-in-tab))))
 
 
 (defun choose-re-search (count)
+  "Return a forward/backward search function according to the sign of COUNT."
   (if (> count 0) 're-search-forward 're-search-backward))
 
 
 (defun tab-navigate-string (count)
+  "Move cursor up or down COUNT strings."
   (let ((column (current-column))
         (real-case-fold-search case-fold-search)
         (search-fun (choose-re-search count))
@@ -589,16 +598,19 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-up-string (count)
+  "Move cursor up COUNT strings."
   (interactive "p")
   (tab-navigate-string (- (1+ count))))
 
 
 (defun tab-down-string (count)
+  "Move cursor down COUNT strings."
   (interactive "p")
   (tab-navigate-string count))
 
 
 (defun tab-restore-staff-location (string column)
+  "Move the cursor to tab string STRING and text column COLUMN."
   (when (tab-check-in-tab)
     (move-to-column column)
     (next-line string)
@@ -606,6 +618,7 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-integer-sign (n)
+  "Return the sign (as -1/0/1) of N."
   (if (= n 0)
       0
     (if (> n 0)
@@ -614,9 +627,8 @@ to nearest modulo 3 note position. Set global variable tab-current-string."
 
 
 (defun tab-move-beyond-staff (direction)
-  "Move to the line above or below the current staff, depending on the sign
-of direction. Return nil if there is no such line (or we're not in tab),
-t otherwise."
+  "Move to the line above or below the current staff, depending on DIRECTION.
+Return nil if there is no such line (or we're not in tab), t otherwise."
   (if (not (tab-check-in-tab))
       nil
     (if (< direction 0)
@@ -632,7 +644,8 @@ t otherwise."
 
 
 (defun tab-move-staff (direction)
-  "Move one staff up or down depending on sign of direction. Leave the cursor on the first character of the first line of the staff moved to."
+  "Move one staff up or down depending on sign of DIRECTION.
+Leave the cursor on the first character of the first line of the staff moved to."
   (let ((tmp-saved-point (copy-marker (point)))
         (can-move t)
         (search-fun (choose-re-search direction)))
@@ -652,6 +665,7 @@ t otherwise."
 
 
 (defun tab-up-staff (count)
+  "Move up COUNT staves, maintaining cursor location relative to the staff."
   (interactive "p")
   (let ((starting-column (current-column))
         (starting-string tab-current-string))
@@ -663,6 +677,7 @@ t otherwise."
 
 
 (defun tab-down-staff (count)
+  "Move down COUNT staves, maintaining cursor location relative to the staff."
   (interactive "p")
   (let ((starting-column (current-column))
         (starting-string tab-current-string))
@@ -674,10 +689,12 @@ t otherwise."
 
 
 (defun new-tab-line-width ()
+  "Return tablature column width, limited by window width."
   (or default-tablature-width (window-body-width)))
 
 
 (defun tab-toggle-lyric-line ()
+  "Toggle the presence of a lyric line on this tab line."
   (interactive)
   (if (tab-check-in-tab)
       (progn
@@ -690,7 +707,8 @@ t otherwise."
 
 
 (defun tab-make-staff ()
-  "Make a tab staff.  Do below current staff if in staff, or three lines below
+  "Make a tab staff.
+Do this below the current staff if in staff, or three lines below
 cursor if not already in staff."
   (interactive)
 
@@ -726,7 +744,7 @@ cursor if not already in staff."
 
 
 (defun toggle-barline (advance)
-  "Toggle barline at point on staff. If ARG is true, advance point too."
+  "Toggle barline at point on staff. Advance cursor if ADVANCE is true."
   (let ((linecount 6)
         (starting-string tab-current-string)
         (barline-string "--|"))
@@ -750,7 +768,7 @@ cursor if not already in staff."
 
 
 (defun tab-barline-in-place ()
-  "Draw a barline down staff"
+  "Toggle a barline at point."
   (interactive)
 	(if (tab-check-in-tab)
       (toggle-barline nil)
@@ -758,7 +776,7 @@ cursor if not already in staff."
 
 
 (defun tab-barline ()
-  "Draw a barline down staff"
+  "Toggle barline at point and advance cursor."
   (interactive)
   (if (tab-check-in-tab)
       (toggle-barline t)
@@ -766,7 +784,7 @@ cursor if not already in staff."
 
 
 (defun tab-forward ()
-  "Move cursor forward one tablature space"
+  "Move point forward one tablature space."
   (interactive)
   (let ((original-column (current-column)))
 
@@ -779,7 +797,7 @@ cursor if not already in staff."
 
 
 (defun tab-delete ()
-  "Delete vertical `chord' of notes"
+  "Delete vertical `chord' of notes at point."
   (let ((index 0) (placemark))
     (setq temporary-goal-column (current-column))
     (previous-line tab-current-string)
@@ -799,7 +817,7 @@ cursor if not already in staff."
 
 
 (defun tab-delete-chord-forward (count)
-  "Delete vertical `chord' of notes at cursor position"
+  "Delete COUNT vertical chords of notes at nearest tab position to point."
   (interactive "p")
   (if (<= count 0) (setq count 1))
 
@@ -813,7 +831,7 @@ cursor if not already in staff."
 
 
 (defun tab-delete-chord-backward (count)
-  "Delete vertical `chord' of notes to left of cursor position"
+  "Delete COUNT vertical chords of notes to left of cursor position."
   (interactive "p")
   (if (<= count 0) (setq count 1))
 
@@ -828,8 +846,9 @@ cursor if not already in staff."
 
 
 (defun tab-delete-note (count)
-  "Delete previous note on current string (lead-mode)
-or current note (chord-mode)."
+  "Delete a note, or previous COUNT chars if not in a tab.
+Note deleted is the current one in chord mode or previous one in lead mode."
+
   (interactive "p")
 
   (if (tab-check-in-tab)
@@ -847,7 +866,7 @@ or current note (chord-mode)."
 
 
 (defun tab-delete-current-note ()
-  "Delete note (if any) that cursor is on, regardless of minor mode"
+  "Delete note at point, regardless of chord/lead mode."
   (interactive)
 
   (when (tab-check-in-tab)
@@ -858,7 +877,7 @@ or current note (chord-mode)."
 
 
 (defun tab-insert (count)
-  "Insert blank tablature space at cursor position"
+  "Insert a blank tablature space at cursor position."
   (interactive "p")
 
   (if (tab-check-in-tab)
@@ -883,8 +902,8 @@ or current note (chord-mode)."
 
 
 (defun tab-begin-end-region (caller-begin caller-end)
-  "Set CALLER-BEGIN/CALLER-END to leftmost/rightmost of top tab line above
-dot or mark.  Return t if dot was left of mark, nil otherwise.
+  "Set CALLER-BEGIN/CALLER-END to ends of top tab line above point/mark.
+Return t if dot was left of mark, nil otherwise.
 Check that both dot and mark are inside same staff of tab."
 
   (let ((placemark (point-marker))
@@ -946,7 +965,7 @@ Check that both dot and mark are inside same staff of tab."
 
 
 (defun tab-kill-internal (delete)
-  "Delete region of tab, putting in rectangle-kill ring if ARG is t"
+  "Delete region of tab, putting in rectangle-kill ring if DELETE is t."
   (let ((placemark (point-marker))
         (begin) (end)
         (begin-col) (end-col)
@@ -1000,7 +1019,7 @@ Check that both dot and mark are inside same staff of tab."
 
 
 (defun tab-kill-region ()
-  "Kill region of tab to rectangle kill ring"
+  "Kill region of tab to rectangle kill ring."
   (interactive)
   (if (tab-check-in-tab)
       (tab-kill-internal t)
@@ -1008,7 +1027,7 @@ Check that both dot and mark are inside same staff of tab."
 
 
 (defun tab-copy-region-as-kill ()
-  "Copy region of tab to rectangle kill ring"
+  "Copy region of tab to rectangle kill ring."
   (interactive)
   (if (tab-check-in-tab)
       (tab-kill-internal nil)
@@ -1016,7 +1035,7 @@ Check that both dot and mark are inside same staff of tab."
 
 
 (defun tab-yank ()
-  "Insert region of tab from rectangle kill ring"
+  "Insert region of tab from rectangle kill ring."
   (interactive)
   (if (tab-check-in-tab)
       (let ((placemark (point-marker)) (top-line) (index 0))
@@ -1036,7 +1055,7 @@ Check that both dot and mark are inside same staff of tab."
 
 
 (defun tab-transpose (frets)
-  "Transpose notes in region up or down by numeric prefix or prompted-for frets"
+  "Transpose notes in region up or down by FRETS (prompt if nil)."
   (interactive "P")
 
   (if (tab-check-in-tab)
@@ -1068,8 +1087,7 @@ Check that both dot and mark are inside same staff of tab."
 
 
 (defun tab-copy-retune ()
-  "If cursor is on top line of tab staff, will copy staff and change into
-current tuning."
+  "If cursor is on top line of tab staff, copy staff and change into current tuning."
   (interactive)
   (let ((old-cursor)
         (new-cursor)
@@ -1142,8 +1160,7 @@ current tuning."
 
 
 (defun tab-analyze-tuning (tuning)
-  "Fill six-element array TUNING with numeric values representing letter
-notes at beginning of current plus next 5 screen lines."
+  "Fill array TUNING with numbers representing tuning of current tab line."
   (when (tab-check-in-tab)
     (save-excursion
       (tab-move-staff-start)
@@ -1174,7 +1191,7 @@ notes at beginning of current plus next 5 screen lines."
 
 
 (defun tab-transpose-chord (transpositions)
-  "Transpose chord at cursor by 6-element array of fret offsets."
+  "Transpose chord at cursor by fret offsets in TRANSPOSITIONS."
   (let ((note))
 
     (setq tab-current-string 0)
@@ -1194,6 +1211,7 @@ notes at beginning of current plus next 5 screen lines."
 
 
 (defun tab-get-string-prefix-symbol (index)
+  "Get the prefix symbol for string INDEX."
   (cond
    ((= index 0) 'tab-0-string-prefix)
    ((= index 1) 'tab-1-string-prefix)
@@ -1204,12 +1222,13 @@ notes at beginning of current plus next 5 screen lines."
 
 
 (defun tab-get-string-prefix (index)
+  "Get the prefix string for string INDEX."
   (symbol-value (tab-get-string-prefix-symbol index)))
 
 
 (defun tab-learn-tuning ()
-  "Memorize 3-character beginning of current plus next 5 screen lines as
-new tuning.  Each line must be unique."
+  "Memorize 3-character beginning of current plus next 5 screen lines as new tuning.
+Each line must be unique."
   (interactive)
 
   (tab-analyze-tuning tab-current-tuning)

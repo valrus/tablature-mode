@@ -205,8 +205,11 @@ Change via \\[tablature-note-name] (tablature-note-name).")
                  (integer :tag "Number of characters"))
   :group 'tablature)
 
-; end of customizable defaults
+;;; end of customizable defaults
 
+(defconst staff-header-width
+  5
+  "Width of the staff header containing tunings, in characters.")
 
 (defvar tablature-mode-map
 	 nil
@@ -506,11 +509,11 @@ Set global variable tablature-current-string."
 
     (setq case-fold-search real-case-fold-search)
 
-    (let ((alignment (% (1+ (current-column)) 3)))
+    (let ((alignment (% (1+ (current-column)) (note-width))))
       ;; put cursor on note position
       (if in-tab
           (cond
-           ((< (current-column) 5) (forward-char (- 5 (current-column))))
+           ((< (current-column) staff-header-width) (forward-char (- staff-header-width (current-column))))
            ((/= alignment 0) (backward-char alignment)))))
 
     (setq in-tab in-tab)))
@@ -557,22 +560,34 @@ Set global variable tablature-current-string."
 
 
 (defun tablature-forward-char (count)
-  "Move cursor forward COUNT spaces in the tab."
+  "Move point forward COUNT notes."
   (interactive "p")
   (let ((original-column (current-column)))
 
     (if (tablature-check-in-tab)
         (progn
-          (if (< original-column 5) (backward-char 3))
-          (forward-char (* count 3)))
+          (if (< original-column staff-header-width) (backward-char (note-width)))
+          (forward-char (note-width 3)))
       ;; else
-      (forward-char count))))
+      (insert (this-command-keys)))))
+
+
+(defun tablature-forward ()
+  "Move point forward one note."
+  (interactive)
+
+  (tablature-forward-char 1))
+
+
+(defun note-width (&optional count)
+  "Return character width of COUNT notes."
+  (* (or count 1) 3))
 
 
 (defun tablature-backward-char (count)
   "Move cursor backward COUNT spaces in the tab."
   (interactive "p")
-  (if (tablature-check-in-tab) (setq count (* count 3)))
+  (if (tablature-check-in-tab) (setq count (notes-to-spaces count)))
   (backward-char count))
 
 
@@ -649,8 +664,7 @@ Set global variable tablature-current-string."
 (defun tablature-move-beyond-staff (direction)
   "Move to the line above or below the current staff, depending on DIRECTION.
 Return nil if there is no such line (or we're not in tab), t otherwise."
-  (if (not (tablature-check-in-tab))
-      nil
+  (when (tablature-check-in-tab)
     (if (< direction 0)
         (forward-line (- (1+ tablature-current-string)))
       (forward-line (- 6 tablature-current-string)))
@@ -803,30 +817,17 @@ cursor if not already in staff."
     (insert (this-command-keys))))
 
 
-(defun tablature-forward ()
-  "Move point forward one tablature space."
-  (interactive)
-  (let ((original-column (current-column)))
-
-    (if (tablature-check-in-tab)
-        (progn
-          (if (< original-column 5) (backward-char 3))
-          (forward-char 3))
-      ;; else
-      (insert (this-command-keys)))))
-
-
-(defun tablature-delete ()
-  "Delete vertical `chord' of notes at point."
+(defun tablature-delete (count)
+  "Delete COUNT vertical `chords' of notes at point."
   (let ((index 0) (placemark))
     (setq temporary-goal-column (current-column))
     (previous-line tablature-current-string)
     (backward-char 2)
     (while (< index 6)
-      (delete-char 3)
+      (delete-char (note-width count))
       (setq placemark (point-marker))
       (end-of-line)
-      (insert "---")
+      (insert-char ?- (note-width count))
       (goto-char placemark)
       (setq temporary-goal-column (current-column))
       (if (< index 5) (next-line 1))
@@ -841,11 +842,7 @@ cursor if not already in staff."
   (interactive "p")
   (if (<= count 0) (setq count 1))
 
-  (if (tablature-check-in-tab)
-      (while (> count 0)
-        (progn
-          (tablature-delete)
-          (setq count (1- count))))
+  (if (tablature-check-in-tab) (tablature-delete count)
     ;; else
     (delete-char count)))
 
@@ -856,13 +853,18 @@ cursor if not already in staff."
   (if (<= count 0) (setq count 1))
 
   (if (tablature-check-in-tab)
-      (while (and (> count 0) (> (current-column) 5))
+      (while (and (> count 0) (tablature-check-in-staff))
         (progn
           (backward-char 3)
           (tablature-delete)
           (setq count (1- count))))
     ;; else
     (delete-backward-char count)))
+
+
+(defun tablature-check-in-staff ()
+  "Check if point is in a tab staff, not including header."
+  (> (current-column) 5))
 
 
 (defun tablature-delete-note (count)
@@ -873,39 +875,44 @@ Note deleted is the current one in chord mode or previous one in lead mode."
 
   (if (tablature-check-in-tab)
       (progn
-        (if (and (bound-and-true-p lead-mode) (> (current-column) 5))
-            (progn
-              (backward-char 2)
-              (delete-backward-char 3)
-              (insert "---")
-              (backward-char 1)))
+        (if (and (bound-and-true-p lead-mode) (tablature-check-in-staff))
+            (tablature-delete-previous-note))
 
         (if (bound-and-true-p chord-mode) (tablature-delete-current-note)))
     ;; else
     (delete-backward-char count)))
 
 
-(defun tablature-delete-current-note ()
-  "Delete note at point, regardless of chord/lead mode."
-  (interactive)
-
+(defun tablature-delete-note-generic (&optional backwards)
+  "Delete a note; the current one or BACKWARDS if specified (and true)."
   (when (tablature-check-in-tab)
-    (forward-char 1)
+    (if (bound-and-true-p backwards) (backward-char 2) (forward-char 1))
     (delete-backward-char 3)
     (insert "---")
     (backward-char 1)))
 
 
+(defun tablature-delete-previous-note ()
+  "Delete previous note, regardless of chord/lead mode."
+  (interactive)
+  (tablature-delete-note-generic t))
+
+
+(defun tablature-delete-current-note ()
+  "Delete note at point, regardless of chord/lead mode."
+  (interactive)
+  (tablature-delete-note-generic))
+
+
 (defun tablature-insert (count)
-  "Insert COUNT blank tablature spaces at cursor position."
+  "Insert COUNT blank tablature spaces after cursor position."
   (interactive "p")
 
   (if (tablature-check-in-tab)
-      (let ((index 0)
-            (placemark))
+      (let ((index 0) (placemark))
         (setq temporary-goal-column (current-column))
         (previous-line tablature-current-string)
-        (backward-char 2)
+        (forward-char 1)
         (while (< index 6)
           (setq placemark (point-marker))
           (insert-char ?- (* count 3))
@@ -1280,6 +1287,7 @@ The first 3 characters of each line are considered, and must be unique."
 
 
 (defun tablature-retune-string ()
+  "Prompt for a new tuning for current string and update all staffs."
   (interactive)
 
   (when (tablature-check-in-tab)
@@ -1304,8 +1312,8 @@ The first 3 characters of each line are considered, and must be unique."
 
 
 (defun tablature-note-name ()
-  "Change names for printing chords (e.g. A# vs. Bb). First enter current name
-of note, then new name."
+  "Change names for printing chords (e.g. A# vs. Bb).
+First enter current name of note, then new name."
   (interactive)
 
   (let ((old)
@@ -1329,6 +1337,7 @@ of note, then new name."
 
 
 (defun tablature-goto-chord-label ()
+  "Move point to the beginning of the current chord label."
   (interactive)
 
   ;; go to appropriate column, and to line above tab
@@ -1360,8 +1369,8 @@ of note, then new name."
 
 
 (defun tablature-label-chord ()
-  "Insert previously analyzed chord above current tab staff.  Can only be
-used immediately after `\\[tablature-analyze-chord]' (tablature-analyze-chord)"
+  "Insert previously analyzed chord above current tab staff.
+Can only be used immediately after `\\[tablature-analyze-chord]' (tablature-analyze-chord)"
   (interactive)
 
   (save-excursion
@@ -1969,7 +1978,7 @@ string found or all six strings done."
 
 
 (defun tablature-string (symbol string)
-  "Place first arg note on second arg string."
+  "Place SYMBOL note on STRING string."
   (setq temporary-goal-column (current-column))
   (previous-line (- tablature-current-string string))
   (delete-char 1)

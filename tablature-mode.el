@@ -855,16 +855,16 @@ cursor if not already in staff."
   (if (tablature-check-in-tab)
       (while (and (> count 0) (tablature-check-in-staff))
         (progn
-          (backward-char 3)
+          (backward-char (note-width))
           (tablature-delete)
           (setq count (1- count))))
     ;; else
     (delete-backward-char count)))
 
 
-(defun tablature-check-in-staff ()
-  "Check if point is in a tab staff, not including header."
-  (> (current-column) 5))
+(defun tablature-check-in-staff (&optional column)
+  "Check if COLUMN (or point) is in a tab staff, not including header."
+  (> (or column (current-column)) staff-header-width))
 
 
 (defun tablature-delete-note (count)
@@ -887,7 +887,7 @@ Note deleted is the current one in chord mode or previous one in lead mode."
   "Delete a note; the current one or BACKWARDS if specified (and true)."
   (when (tablature-check-in-tab)
     (if (bound-and-true-p backwards) (backward-char 2) (forward-char 1))
-    (delete-backward-char 3)
+    (delete-backward-char (note-width))
     (insert "---")
     (backward-char 1)))
 
@@ -915,9 +915,9 @@ Note deleted is the current one in chord mode or previous one in lead mode."
         (forward-char 1)
         (while (< index 6)
           (setq placemark (point-marker))
-          (insert-char ?- (* count 3))
+          (insert-char ?- (note-width count))
           (end-of-line)
-          (delete-backward-char (* count 3))
+          (delete-backward-char (note-width count))
           (goto-char placemark)
           (setq temporary-goal-column (current-column))
           (if (< index 5) (next-line 1))

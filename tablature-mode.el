@@ -567,7 +567,7 @@ Set global variable tablature-current-string."
     (if (tablature-check-in-tab)
         (progn
           (if (< original-column staff-header-width) (backward-char (note-width)))
-          (forward-char (note-width 3)))
+          (forward-char (note-width)))
       ;; else
       (insert (this-command-keys)))))
 
@@ -587,7 +587,7 @@ Set global variable tablature-current-string."
 (defun tablature-backward-char (count)
   "Move cursor backward COUNT spaces in the tab."
   (interactive "p")
-  (if (tablature-check-in-tab) (setq count (notes-to-spaces count)))
+  (if (tablature-check-in-tab) (setq count (note-width count)))
   (backward-char count))
 
 

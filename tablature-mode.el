@@ -258,6 +258,19 @@ Available for automatic insertion into tab by `\\[tablature-label-chord]' (tabla
 
 (defvar tablature-syntax-highlights tablature-font-lock-keywords-1)
 
+(defconst tablature-embellishment-alist
+  '(("h" "hammer-on")
+    ("p" "pull-off")
+    ("b" "bend")
+    ("r" "release")
+    ("/" "slide up")
+    ("\\" "slide down")
+    ("~" "vibrato")
+    ("(" "ghost")
+    ("-" "normal")
+    ("X" "muffle"))
+  "Map of tab symbols to tab embellishment names.")
+
 (define-derived-mode tablature-mode fundamental-mode "Tablature"
   "Basic tab mode. Use chord-mode or lead-mode instead."
   (if (not tablature-mode-map) (tablature-make-mode-map))
@@ -413,12 +426,6 @@ Flag controls whether chord spelling also includes rational 12-tone version."
   ;; (define-key tablature-mode-map "\M-OC"	'tablature-forward-char)
   ;; (define-key tablature-mode-map "\M-OD"	'tablature-backward-char)
 
-  ;; DEBUG ... doesn't work in 19.X in non-X mode
-  ;; (define-key tablature-mode-map [up]		'previous-line)
-  ;; (define-key tablature-mode-map [down]		'next-line)
-  ;; (define-key tablature-mode-map [right]	'tablature-forward-char)
-  ;; (define-key tablature-mode-map [left]		'tablature-backward-char)
-
   (let ((key-ndx 32))
     (while (< key-ndx 128)
       (progn
@@ -482,7 +489,6 @@ Flag controls whether chord spelling also includes rational 12-tone version."
   (define-key tablature-mode-map "V"	'tablature-G4)
   (define-key tablature-mode-map "B"	'tablature-B4)
   (define-key tablature-mode-map "N"	'tablature-e4))
-
 
 (defun tablature-check-in-tab ()
   "Return whether cursor is in a tab staff line.
@@ -577,6 +583,17 @@ Set global variable tablature-current-string."
   (interactive)
 
   (tablature-forward-char 1))
+
+
+(defun tablature-advance ()
+  "In lead mode, insert a space. In chord mode, move forward."
+  (interactive)
+  (if (tablature-check-in-tab)
+      (progn
+        (if (bound-and-true-p lead-mode) (tablature-insert)
+          (if (bound-and-true-p chord-mode) (tablature-forward))))
+    ;; else
+    (insert (this-command-keys))))
 
 
 (defun note-width (&optional count)
@@ -1933,7 +1950,6 @@ string found or all six strings done."
         (forward-char 1)
         (if (not (looking-at "[0-9]")) (backward-char 1)))
     (insert (this-command-keys))))
-
 
 (defun tablature-hammer ()
   "Add a hammer-on embellishment to the current note."
